@@ -6,15 +6,21 @@ import dts from "rollup-plugin-dts"
 
 const pkgCache = Object.create(null)
 
+function tsFiles(dir: string) {
+  return fs.readdirSync(dir).filter(f => /(?<!\.d)\.ts$/.test(f)).map(f => join(dir, f))
+}
+
 class Package {
   readonly root: string
   readonly files: readonly string[]
+  readonly tests: readonly string[]
   readonly json: any
 
   constructor(readonly main: string) {
-    let parent = dirname(main)
-    this.root = dirname(parent)
-    this.files = fs.readdirSync(parent).filter(f => /(?<!\.d)\.ts$/.test(f)).map(f => join(parent, f))
+    let parent = dirname(main), root = dirname(parent), tests = join(root, "test")
+    this.root = root
+    this.tests = fs.existsSync(tests) ? tsFiles(tests) : []
+    this.files = tsFiles(parent).concat(this.tests)
     this.json = JSON.parse(fs.readFileSync(join(this.root, "package.json"), "utf8"))
   }
 
@@ -24,7 +30,8 @@ class Package {
 }
 
 const tsOptions: ts.CompilerOptions = {
-  lib: ["lib.es6.d.ts", "lib.dom.d.ts", "lib.scripthost.d.ts"],
+  lib: ["lib.es6.d.ts", "lib.scripthost.d.ts", "lib.dom.d.ts"],
+  types: ["mocha"],
   stripInternal: true,
   noUnusedLocals: true,
   strict: true,
@@ -33,6 +40,12 @@ const tsOptions: ts.CompilerOptions = {
   newLine: ts.NewLineKind.LineFeed,
   declaration: true,
   moduleResolution: ts.ModuleResolutionKind.NodeJs
+}
+
+function optionsWithPaths(pkgs: readonly Package[]): ts.CompilerOptions {
+  let paths: ts.MapLike<string[]> = {}
+  for (let pkg of pkgs) paths[pkg.json.name] = [pkg.main]
+  return {paths, ...tsOptions}
 }
 
 class Output {
@@ -56,9 +69,11 @@ class Output {
 }
 
 function readAndMangleComments(files: readonly string[]) {
+  let fileMap = Object.create(null)
+  for (let f of files) fileMap[f] = true
   return (name: string) => {
     let file = ts.sys.readFile(name)
-    if (file && files.includes(name))
+    if (file && fileMap[name])
       return file.replace(/(?:([ \t]*)\/\/\/.*\n)+/g, (comment, space) => {
         comment = comment.replace(/\]\(#/g, "](https://codemirror.net/6/docs/ref/#")
         return `${space}/**\n${space}${comment.slice(space.length).replace(/\/\/\/ ?/g, "")}${space}*/\n`
@@ -67,10 +82,9 @@ function readAndMangleComments(files: readonly string[]) {
   }
 }
 
-export function runTS(main: string) {
-  let pkg = Package.get(main)
-  let host = Object.assign({}, ts.createCompilerHost(tsOptions), {readFile: readAndMangleComments(pkg.files)})
-  let program = ts.createProgram({rootNames: pkg.files, options: tsOptions, host})
+function runTS(files: readonly string[], options = tsOptions) {
+  let host = Object.assign({}, ts.createCompilerHost(options), {readFile: readAndMangleComments(files)})
+  let program = ts.createProgram({rootNames: files, options: options, host})
   let out = new Output, result = program.emit(undefined, out.write)
   return result.emitSkipped ? null : out
 }
@@ -81,14 +95,13 @@ const tsFormatHost = {
   getNewLine: () => "\n"
 }
 
-export function watchTS(mains: readonly string[]) {
-  let pkgs = mains.map(f => Package.get(f)), files = pkgs.reduce((f, p) => f.concat(p.files), [])
+function watchTS(files: readonly string[], options = tsOptions) {
   let out = new Output, sys = Object.assign({}, ts.sys, {
     writeFile: out.write,
     readFile: readAndMangleComments(files)
   })
   ts.createWatchProgram(ts.createWatchCompilerHost(
-    files, tsOptions, sys, 
+    files as string[], options, sys, 
     ts.createEmitAndSemanticDiagnosticsBuilderProgram,
     diag => console.error(ts.formatDiagnostic(diag, tsFormatHost)),
     diag => console.info(ts.flattenDiagnosticMessageText(diag.messageText, "\n"))
@@ -124,8 +137,8 @@ async function emit(bundle: RollupBuild, conf: any) {
     await fs.promises.writeFile(join(dir, file.fileName), (file as any).code || (file as any).source)
 }
 
-export async function bundle(main: string, compiled: Output) {
-  let pkg = Package.get(main), plugins = [resolveOutput(compiled, ".js"), loadOutput(compiled)]
+async function bundle(pkg: Package, compiled: Output) {
+  let plugins = [resolveOutput(compiled, ".js"), loadOutput(compiled)]
   if ((pkg.json.devDependencies || {})["lezer-generator"])
     // @ts-ignore
     plugins.push((await import("lezer-generator/rollup")).lezer())
@@ -152,7 +165,10 @@ export async function bundle(main: string, compiled: Output) {
   let tscBundle = await rollup({
     input: pkg.main.replace(/\.ts$/, ".d.ts"),
     plugins: [resolveOutput(compiled, ".d.ts"), dts()],
-    onwarn(warning, warn) { if (warning.code != "CIRCULAR_DEPENDENCY") warn(warning) }
+    onwarn(warning, warn) {
+      if (warning.code != "CIRCULAR_DEPENDENCY" && warning.code != "UNUSED_EXTERNAL_IMPORT")
+        warn(warning)
+    }
   })
   ts.sys.readFile = oldReadFile
   await emit(tscBundle, {
@@ -162,27 +178,35 @@ export async function bundle(main: string, compiled: Output) {
 }
 
 export async function build(main: string) {
-  let pkg = Package.get(main), compiled = runTS(pkg)
+  let pkg = Package.get(main), compiled = runTS(pkg.files, optionsWithPaths([pkg]))
   if (!compiled) return false
   await bundle(pkg, compiled)
   return true
 }
 
-export function watchBuild(mains: readonly string[]) {
-  let pkgs = mains.map(Package.get), out = watchTS(mains)
-  let bundleAll = (pkgs: readonly Package[]) => {
+export function watch(mains: readonly string[], extra: readonly string[] = []) {
+  let pkgs = mains.map(Package.get)
+  let allFiles = pkgs.reduce((a, p) => a.concat(p.files), []).concat(extra)
+  let out = watchTS(allFiles, optionsWithPaths(pkgs))
+  let bundleAll = async (pkgs: readonly Package[]) => {
     console.log("Bundling " + pkgs.map(p => basename(p.root)).join(", "))
-    for (let pkg of pkgs) bundle(pkg.main, out)
+    await Promise.all(pkgs.map(p => bundle(p, out)))
     console.log("Bundling done.")
   }
   out.watchers.push(changed => {
-    let changedPkgs: Package[] = []
+    let changedPkgs: Package[] = [], changedFiles: string[] = []
     for (let file of changed) {
-      let root = dirname(dirname(file))
-      let pkg = pkgs.find(p => p.root = root)
-      if (!pkg) throw new Error("No package found for " + file)
-      if (!changedPkgs.includes(pkg)) changedPkgs.push(pkg)
+      if (extra.includes(file)) {
+        changedFiles.push(file)
+      } else {
+        let root = dirname(dirname(file))
+        let pkg = pkgs.find(p => p.root = root)
+        if (!pkg) throw new Error("No package found for " + file)
+        if (pkg.tests.includes(file)) changedFiles.push(file)
+        else if (!changedPkgs.includes(pkg)) changedPkgs.push(pkg)
+      }
     }
+    for (let file of changedFiles) fs.writeFileSync(file, out.files[file])
     bundleAll(changedPkgs)
   })
   bundleAll(pkgs)

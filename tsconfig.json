@@ -5,7 +5,7 @@
     "noUnusedLocals": true,
     "strict": true,
     "target": "es6",
-    "module": "es2020",
+    "module": "commonjs",
     "newLine": "lf",
     "moduleResolution": "node",
     "esModuleInterop": true
