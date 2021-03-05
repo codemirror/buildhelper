@@ -1,0 +1,20 @@
+{
+  "name": "@codemirror/buildhelper",
+  "version": "0.1.0",
+  "description": "Helper package to build CodeMirror packages",
+  "author": {
+    "name": "Marijn Haverbeke",
+    "email": "marijnh@gmail.com",
+    "url": "http://marijnhaverbeke.nl"
+  },
+  "bin": {
+    "cm-buildhelper": "dist/cm-buildhelper.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "lezer-generator": "^0.13.3",
+    "rollup": "^2.35.1",
+    "rollup-plugin-dts": "^2.0.1",
+    "typescript": "^4.2.3"
+  }
+}
