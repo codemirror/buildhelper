@@ -202,12 +202,13 @@ export function watch(mains: readonly string[], extra: readonly string[] = []) {
   out.watchers.push(changed => {
     let changedPkgs: Package[] = [], changedFiles: string[] = []
     for (let file of changed) {
-      if (extra.includes(file)) {
+      if (extra.includes(file.replace(/\.d\.ts$|\.js$/, ".ts"))) {
         changedFiles.push(file)
       } else {
         let root = dirname(dirname(file))
-        let pkg = pkgs.find(p => p.root = root)
-        if (!pkg) throw new Error("No package found for " + file)
+        let pkg = pkgs.find(p => p.root == root)
+        if (!pkg)
+          throw new Error("No package found for " + file)
         if (pkg.tests.includes(file)) changedFiles.push(file)
         else if (!changedPkgs.includes(pkg)) changedPkgs.push(pkg)
       }
