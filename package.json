@@ -14,7 +14,7 @@
   "dependencies": {
     "lezer-generator": "^0.13.3",
     "rollup": "^2.35.1",
-    "rollup-plugin-dts": "^2.0.1",
+    "rollup-plugin-dts": "^3.0.0",
     "typescript": "^4.2.3"
   }
 }

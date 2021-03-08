@@ -1,7 +1,7 @@
 import * as ts from "typescript"
 import {join, dirname, basename, resolve} from "path"
 import * as fs from "fs"
-import {rollup, RollupBuild} from "rollup"
+import {rollup, RollupBuild, Plugin} from "rollup"
 import dts from "rollup-plugin-dts"
 
 const pkgCache = Object.create(null)
@@ -12,15 +12,20 @@ function tsFiles(dir: string) {
 
 class Package {
   readonly root: string
-  readonly files: readonly string[]
+  readonly dirs: readonly string[]
   readonly tests: readonly string[]
   readonly json: any
 
   constructor(readonly main: string) {
-    let parent = dirname(main), root = dirname(parent), tests = join(root, "test")
+    let src = dirname(main), root = dirname(src), tests = join(root, "test")
     this.root = root
-    this.tests = fs.existsSync(tests) ? tsFiles(tests) : []
-    this.files = tsFiles(parent).concat(this.tests)
+    let dirs = this.dirs = [src]
+    if (fs.existsSync(tests)) {
+      this.tests = tsFiles(tests)
+      dirs.push(tests)
+    } else {
+      this.tests = []
+    }
     this.json = JSON.parse(fs.readFileSync(join(this.root, "package.json"), "utf8"))
   }
 
@@ -29,23 +34,27 @@ class Package {
   }
 }
 
-const tsOptions: ts.CompilerOptions = {
-  lib: ["lib.es6.d.ts", "lib.scripthost.d.ts", "lib.dom.d.ts"],
+const tsOptions = {
+  lib: ["es6", "scripthost", "dom"],
   types: ["mocha"],
   stripInternal: true,
   noUnusedLocals: true,
   strict: true,
-  target: ts.ScriptTarget.ES2020,
-  module: ts.ModuleKind.ES2020,
-  newLine: ts.NewLineKind.LineFeed,
+  target: "es2020",
+  module: "es2020",
+  newLine: "lf",
   declaration: true,
-  moduleResolution: ts.ModuleResolutionKind.NodeJs
+  moduleResolution: "node"
 }
 
-function optionsWithPaths(pkgs: readonly Package[]): ts.CompilerOptions {
+function configFor(pkgs: readonly Package[], extra: readonly string[] = []) {
   let paths: ts.MapLike<string[]> = {}
   for (let pkg of pkgs) paths[pkg.json.name] = [pkg.main]
-  return {paths, ...tsOptions}
+  return {
+    compilerOptions: {paths, ...tsOptions},
+    include: pkgs.reduce((ds, p) => ds.concat(p.dirs.map(d => join(d, "*.ts"))), [] as string[])
+      .concat(extra)
+  }
 }
 
 class Output {
@@ -68,13 +77,11 @@ class Output {
   }
 }
 
-function readAndMangleComments(files: readonly string[]) {
-  let fileMap = Object.create(null)
-  for (let f of files) fileMap[f] = true
+function readAndMangleComments(dirs: readonly string[]) {
   return (name: string) => {
     let file = ts.sys.readFile(name)
-    if (file && fileMap[name])
-      return file.replace(/(?:([ \t]*)\/\/\/.*\n)+/g, (comment, space) => {
+    if (file && dirs.includes(dirname(name)))
+      file = file.replace(/(?:([ \t]*)\/\/\/.*\n)+/g, (comment, space) => {
         comment = comment.replace(/\]\(#/g, "](https://codemirror.net/6/docs/ref/#")
         return `${space}/**\n${space}${comment.slice(space.length).replace(/\/\/\/ ?/g, "")}${space}*/\n`
       })
@@ -82,9 +89,10 @@ function readAndMangleComments(files: readonly string[]) {
   }
 }
 
-function runTS(files: readonly string[], options = tsOptions) {
-  let host = Object.assign({}, ts.createCompilerHost(options), {readFile: readAndMangleComments(files)})
-  let program = ts.createProgram({rootNames: files, options: options, host})
+function runTS(dirs: readonly string[], tsconfig: any) {
+  let config = ts.parseJsonConfigFileContent(tsconfig, ts.sys, dirname(dirs[0]))
+  let host = Object.assign({}, ts.createCompilerHost(config.options), {readFile: readAndMangleComments(dirs)})
+  let program = ts.createProgram({rootNames: config.fileNames, options: config.options, host})
   let out = new Output, result = program.emit(undefined, out.write)
   return result.emitSkipped ? null : out
 }
@@ -95,13 +103,18 @@ const tsFormatHost = {
   getNewLine: () => "\n"
 }
 
-function watchTS(files: readonly string[], options = tsOptions) {
-  let out = new Output, sys = Object.assign({}, ts.sys, {
-    writeFile: out.write,
-    readFile: readAndMangleComments(files)
-  })
+function watchTS(dirs: readonly string[], tsconfig: any) {
+  let out = new Output, mangle = readAndMangleComments(dirs)
+  let dummyConf = join(dirname(dirname(dirs[0])), "TSCONFIG.json")
   ts.createWatchProgram(ts.createWatchCompilerHost(
-    files as string[], options, sys, 
+    dummyConf,
+    undefined,
+    Object.assign({}, ts.sys, {
+      writeFile: out.write,
+      readFile: (name: string) => {
+        return name == dummyConf ? JSON.stringify(tsconfig) : mangle(name)
+      }
+    }),
     ts.createEmitAndSemanticDiagnosticsBuilderProgram,
     diag => console.error(ts.formatDiagnostic(diag, tsFormatHost)),
     diag => console.info(ts.flattenDiagnosticMessageText(diag.messageText, "\n"))
@@ -111,22 +124,20 @@ function watchTS(files: readonly string[], options = tsOptions) {
 
 function external(id: string) { return id != "tslib" && !/^(\.?\/|\w:)/.test(id) }
 
-function resolveOutput(output: Output, ext: string) {
+function outputPlugin(output: Output, ext: string, base: Plugin) {
+  let {resolveId, load} = base
   return {
-    name: "resolve-ts-output",
-    resolveId(source: string, base: string | undefined) {
+    ...base,
+    resolveId(source: string, base: string | undefined, options: any) {
       let full = base && source[0] == "." ? resolve(dirname(base), source) : source
       if (!/\.\w+$/.test(full)) full += ext
       if (output.files[full]) return full
+      return resolveId ? resolveId.call(this, source, base, options) : undefined
+    },
+    load(file: string) {
+      return output.files[file] || (load && load.call(this, file))
     }
-  }
-}
-
-function loadOutput(output: Output) {
-  return {
-    name: "load-ts-output",
-    load(file: string) { return output.files[file] }
-  }
+  } as Plugin
 }
 
 async function emit(bundle: RollupBuild, conf: any) {
@@ -138,14 +149,14 @@ async function emit(bundle: RollupBuild, conf: any) {
 }
 
 async function bundle(pkg: Package, compiled: Output) {
-  let plugins = [resolveOutput(compiled, ".js"), loadOutput(compiled)]
-  if ((pkg.json.devDependencies || {})["lezer-generator"])
-    // @ts-ignore
-    plugins.push((await import("lezer-generator/rollup")).lezer())
+  let lezer = (pkg.json.devDependencies || {})["lezer-generator"]
   let bundle = await rollup({
     input: pkg.main.replace(/\.ts$/, ".js"),
     external,
-    plugins
+    plugins: [
+      // @ts-ignore
+      outputPlugin(compiled, ".js", lezer ? (await import("lezer-generator/rollup")).lezer() : {name: "dummy"})
+    ]
   })
   let dist = join(pkg.root, "dist")
   await emit(bundle, {
@@ -158,19 +169,14 @@ async function bundle(pkg: Package, compiled: Output) {
     file: join(dist, "index.cjs")
   })
 
-  // This is an awful kludge to get rollup-plugin-dts to read our
-  // magic nonexistent files.
-  let oldReadFile = ts.sys.readFile
-  ts.sys.readFile = (file: string) => compiled.files[file] || oldReadFile(file)
   let tscBundle = await rollup({
     input: pkg.main.replace(/\.ts$/, ".d.ts"),
-    plugins: [resolveOutput(compiled, ".d.ts"), dts()],
+    plugins: [outputPlugin(compiled, ".d.ts", {name: "dummy"}), dts()],
     onwarn(warning, warn) {
       if (warning.code != "CIRCULAR_DEPENDENCY" && warning.code != "UNUSED_EXTERNAL_IMPORT")
         warn(warning)
     }
   })
-  ts.sys.readFile = oldReadFile
   await emit(tscBundle, {
     format: "esm",
     file: join(dist, "index.d.ts")
@@ -178,7 +184,7 @@ async function bundle(pkg: Package, compiled: Output) {
 }
 
 export async function build(main: string) {
-  let pkg = Package.get(main), compiled = runTS(pkg.files, optionsWithPaths([pkg]))
+  let pkg = Package.get(main), compiled = runTS(pkg.dirs, configFor([pkg]))
   if (!compiled) return false
   await bundle(pkg, compiled)
   return true
@@ -186,11 +192,11 @@ export async function build(main: string) {
 
 export function watch(mains: readonly string[], extra: readonly string[] = []) {
   let pkgs = mains.map(Package.get)
-  let allFiles = pkgs.reduce((a, p) => a.concat(p.files), []).concat(extra)
-  let out = watchTS(allFiles, optionsWithPaths(pkgs))
+  let allDirs = pkgs.reduce((a, p) => a.concat(p.dirs), [])
+  let out = watchTS(allDirs, configFor(pkgs, extra))
   let bundleAll = async (pkgs: readonly Package[]) => {
     console.log("Bundling " + pkgs.map(p => basename(p.root)).join(", "))
-    await Promise.all(pkgs.map(p => bundle(p, out)))
+    for (let pkg of pkgs) await bundle(pkg, out)
     console.log("Bundling done.")
   }
   out.watchers.push(changed => {
