@@ -196,7 +196,10 @@ export function watch(mains: readonly string[], extra: readonly string[] = []) {
   let out = watchTS(allDirs, configFor(pkgs, extra))
   let bundleAll = async (pkgs: readonly Package[]) => {
     console.log("Bundling " + pkgs.map(p => basename(p.root)).join(", "))
-    for (let pkg of pkgs) await bundle(pkg, out)
+    for (let pkg of pkgs) {
+      try { await bundle(pkg, out) }
+      catch(e) { console.error(`Failed to bundle ${basename(pkg.root)}:\n${e}`) }
+    }
     console.log("Bundling done.")
   }
   out.watchers.push(changed => {

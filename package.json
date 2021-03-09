@@ -7,8 +7,9 @@
     "email": "marijnh@gmail.com",
     "url": "http://marijnhaverbeke.nl"
   },
+  "main": "./src/build.js",
   "bin": {
-    "cm-buildhelper": "dist/cm-buildhelper.js"
+    "cm-buildhelper": "bin/cm-buildhelper.js"
   },
   "license": "MIT",
   "dependencies": {

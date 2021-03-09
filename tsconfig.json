@@ -4,11 +4,11 @@
     "stripInternal": true,
     "noUnusedLocals": true,
     "strict": true,
-    "target": "es6",
+    "target": "es2020",
     "module": "commonjs",
     "newLine": "lf",
     "moduleResolution": "node",
-    "esModuleInterop": true
+    "allowSyntheticDefaultImports": true
   },
   "include": ["src/*.ts"]
 }
