@@ -10,4 +10,6 @@ if (args.length != 1) {
   process.exit(1)
 }
 
-build(resolve(args[0]))
+build(resolve(args[0])).then(result => {
+  if (!result) process.exit(1)
+})

@@ -4,7 +4,7 @@ import * as fs from "fs"
 import {rollup, RollupBuild, Plugin} from "rollup"
 import dts from "rollup-plugin-dts"
 
-const pkgCache = Object.create(null)
+const pkgCache: {[main: string]: Package} = Object.create(null)
 
 function tsFiles(dir: string) {
   return fs.readdirSync(dir).filter(f => /(?<!\.d)\.ts$/.test(f)).map(f => join(dir, f))
@@ -15,6 +15,7 @@ class Package {
   readonly dirs: readonly string[]
   readonly tests: readonly string[]
   readonly json: any
+  readonly lezer: boolean
 
   constructor(readonly main: string) {
     let src = dirname(main), root = dirname(src), tests = join(root, "test")
@@ -26,10 +27,11 @@ class Package {
     } else {
       this.tests = []
     }
+    this.lezer = fs.readdirSync(src).some(f => /\.grammar$/.test(f))
     this.json = JSON.parse(fs.readFileSync(join(this.root, "package.json"), "utf8"))
   }
 
-  static get(main: string) {
+  static get(main: string): Package {
     return pkgCache[main] || (pkgCache[main] = new Package(main))
   }
 }
@@ -149,13 +151,12 @@ async function emit(bundle: RollupBuild, conf: any) {
 }
 
 async function bundle(pkg: Package, compiled: Output) {
-  let lezer = (pkg.json.devDependencies || {})["lezer-generator"]
   let bundle = await rollup({
     input: pkg.main.replace(/\.ts$/, ".js"),
     external,
     plugins: [
       // @ts-ignore
-      outputPlugin(compiled, ".js", lezer ? (await import("lezer-generator/rollup")).lezer() : {name: "dummy"})
+      outputPlugin(compiled, ".js", pkg.lezer ? (await import("lezer-generator/rollup")).lezer() : {name: "dummy"})
     ]
   })
   let dist = join(pkg.root, "dist")
@@ -183,17 +184,25 @@ async function bundle(pkg: Package, compiled: Output) {
   })
 }
 
-export async function build(main: string) {
-  let pkg = Package.get(main), compiled = runTS(pkg.dirs, configFor([pkg]))
+function allDirs(pkgs: readonly Package[]) {
+  return pkgs.reduce((a, p) => a.concat(p.dirs), [] as string[])
+}
+
+export async function build(main: string | readonly string[]) {
+  let pkgs = typeof main == "string" ? [Package.get(main)] : main.map(Package.get)
+  let compiled = runTS(allDirs(pkgs), configFor(pkgs))
   if (!compiled) return false
-  await bundle(pkg, compiled)
+  for (let pkg of pkgs) {
+    await bundle(pkg, compiled)
+    for (let file of pkg.tests.map(f => f.replace(/\.ts$/, ".js")))
+      fs.writeFileSync(file, compiled.files[file])
+  }
   return true
 }
 
 export function watch(mains: readonly string[], extra: readonly string[] = []) {
   let pkgs = mains.map(Package.get)
-  let allDirs = pkgs.reduce((a, p) => a.concat(p.dirs), [])
-  let out = watchTS(allDirs, configFor(pkgs, extra))
+  let out = watchTS(allDirs(pkgs), configFor(pkgs, extra))
   let bundleAll = async (pkgs: readonly Package[]) => {
     console.log("Bundling " + pkgs.map(p => basename(p.root)).join(", "))
     for (let pkg of pkgs) {
