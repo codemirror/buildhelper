@@ -93,7 +93,8 @@ function readAndMangleComments(dirs: readonly string[]) {
 
 function runTS(dirs: readonly string[], tsconfig: any) {
   let config = ts.parseJsonConfigFileContent(tsconfig, ts.sys, dirname(dirs[0]))
-  let host = Object.assign({}, ts.createCompilerHost(config.options), {readFile: readAndMangleComments(dirs)})
+  let host = ts.createCompilerHost(config.options)
+  host.readFile = readAndMangleComments(dirs)
   let program = ts.createProgram({rootNames: config.fileNames, options: config.options, host})
   let out = new Output, result = program.emit(undefined, out.write)
   return result.emitSkipped ? null : out
