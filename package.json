@@ -15,6 +15,10 @@
     "prepare": "tsc"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codemirror/buildhelper.git"
+  },
   "devDependencies": {
     "@types/node": "^14.14.33"
   },
