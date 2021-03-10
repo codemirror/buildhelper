@@ -203,17 +203,12 @@ export async function build(main: string | readonly string[]) {
 export function watch(mains: readonly string[], extra: readonly string[] = []) {
   let pkgs = mains.map(Package.get)
   let out = watchTS(allDirs(pkgs), configFor(pkgs, extra))
-  let bundleAll = async (pkgs: readonly Package[]) => {
-    console.log("Bundling " + pkgs.map(p => basename(p.root)).join(", "))
-    for (let pkg of pkgs) {
-      try { await bundle(pkg, out) }
-      catch(e) { console.error(`Failed to bundle ${basename(pkg.root)}:\n${e}`) }
-    }
-    console.log("Bundling done.")
-  }
-  out.watchers.push(changed => {
+  out.watchers.push(writeFor)
+  writeFor(Object.keys(out.files))
+
+  async function writeFor(files: readonly string[]) {
     let changedPkgs: Package[] = [], changedFiles: string[] = []
-    for (let file of changed) {
+    for (let file of files) {
       if (extra.includes(file.replace(/\.d\.ts$|\.js$/, ".ts"))) {
         changedFiles.push(file)
       } else {
@@ -226,7 +221,11 @@ export function watch(mains: readonly string[], extra: readonly string[] = []) {
       }
     }
     for (let file of changedFiles) fs.writeFileSync(file, out.files[file])
-    bundleAll(changedPkgs)
-  })
-  bundleAll(pkgs)
+    console.log("Bundling " + pkgs.map(p => basename(p.root)).join(", "))
+    for (let pkg of changedPkgs) {
+      try { await bundle(pkg, out) }
+      catch(e) { console.error(`Failed to bundle ${basename(pkg.root)}:\n${e}`) }
+    }
+    console.log("Bundling done.")
+  }
 }

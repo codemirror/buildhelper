@@ -11,6 +11,9 @@
   "bin": {
     "cm-buildhelper": "bin/cm-buildhelper.js"
   },
+  "scripts": {
+    "prepare": "tsc"
+  },
   "license": "MIT",
   "dependencies": {
     "lezer-generator": "^0.13.3",
