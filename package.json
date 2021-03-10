@@ -15,6 +15,9 @@
     "prepare": "tsc"
   },
   "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^14.14.33"
+  },
   "dependencies": {
     "lezer-generator": "^0.13.3",
     "rollup": "^2.35.1",
