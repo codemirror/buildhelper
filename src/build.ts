@@ -210,18 +210,19 @@ export function watch(mains: readonly string[], extra: readonly string[] = []) {
   async function writeFor(files: readonly string[]) {
     let changedPkgs: Package[] = [], changedFiles: string[] = []
     for (let file of files) {
-      if (extra.includes(file.replace(/\.d\.ts$|\.js$/, ".ts"))) {
+      let ts = file.replace(/\.d\.ts$|\.js$/, ".ts")
+      if (extra.includes(ts)) {
         changedFiles.push(file)
       } else {
         let root = dirname(dirname(file))
         let pkg = pkgs.find(p => p.root == root)
         if (!pkg)
           throw new Error("No package found for " + file)
-        if (pkg.tests.includes(file)) changedFiles.push(file)
+        if (pkg.tests.includes(ts)) changedFiles.push(file)
         else if (!changedPkgs.includes(pkg)) changedPkgs.push(pkg)
       }
     }
-    for (let file of changedFiles) fs.writeFileSync(file, out.files[file])
+    for (let file of changedFiles) if (/\.js$/.test(file)) fs.writeFileSync(file, out.files[file])
     console.log("Bundling " + pkgs.map(p => basename(p.root)).join(", "))
     for (let pkg of changedPkgs) {
       try { await bundle(pkg, out) }
