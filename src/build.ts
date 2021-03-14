@@ -42,10 +42,11 @@ const tsOptions = {
   stripInternal: true,
   noUnusedLocals: true,
   strict: true,
-  target: "es2020",
+  target: "es6",
   module: "es2020",
   newLine: "lf",
   declaration: true,
+  declarationMap: true,
   moduleResolution: "node"
 }
 
