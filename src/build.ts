@@ -3,6 +3,8 @@ import {join, dirname, basename, resolve} from "path"
 import * as fs from "fs"
 import {rollup, RollupBuild, Plugin} from "rollup"
 import dts from "rollup-plugin-dts"
+import {parse, Node} from "acorn"
+import {recursive} from "acorn-walk"
 
 const pkgCache: {[main: string]: Package} = Object.create(null)
 
@@ -143,12 +145,39 @@ function outputPlugin(output: Output, ext: string, base: Plugin) {
   } as Plugin
 }
 
-async function emit(bundle: RollupBuild, conf: any) {
+function addPureComments(code: string) {
+  let positions: number[] = []
+  function call(node: any, _s: any, c: (node: Node, type?: string) => void) {
+    node.arguments.forEach((n: any) => c(n))
+    c(node.callee)
+    positions.push(node.start)
+  }
+  recursive(parse(code, {ecmaVersion: 2020, sourceType: "module"}), null, {
+    CallExpression: call,
+    NewExpression: call,
+    Function() {},
+    Class() {}
+  })
+  positions.sort((a, b) => a - b)
+  for (let pos = 0, i = 0, result = "";; i++) {
+    let next = i == positions.length ? code.length : positions[i]
+    if (pos == next) continue
+    result += code.slice(pos, next)
+    pos = next
+    if (i == positions.length) return result
+    result += "/*@__PURE__*/"
+  }
+}
+
+async function emit(bundle: RollupBuild, conf: any, makePure = false) {
   let result = await bundle.generate(conf)
   let dir = dirname(conf.file)
   await fs.promises.mkdir(dir, {recursive: true}).catch(() => null)
-  for (let file of result.output)
-    await fs.promises.writeFile(join(dir, file.fileName), (file as any).code || (file as any).source)
+  for (let file of result.output) {
+    let content = (file as any).code || (file as any).source
+    if (makePure) content = addPureComments(content)
+    await fs.promises.writeFile(join(dir, file.fileName), content)
+  }
 }
 
 async function bundle(pkg: Package, compiled: Output) {
@@ -165,7 +194,7 @@ async function bundle(pkg: Package, compiled: Output) {
     format: "esm",
     file: join(dist, "index.js"),
     externalLiveBindings: false
-  })
+  }, true)
   await emit(bundle, {
     format: "cjs",
     file: join(dist, "index.cjs")
