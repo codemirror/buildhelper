@@ -145,27 +145,48 @@ function outputPlugin(output: Output, ext: string, base: Plugin) {
   } as Plugin
 }
 
+const pure = "/*@__PURE__*/"
+
 function addPureComments(code: string) {
-  let positions: number[] = []
-  function call(node: any, _s: any, c: (node: Node, type?: string) => void) {
+  let patches: {from: number, to?: number, insert: string}[] = []
+  function walkCall(node: any, c: (node: Node, state?: any) => void) {
     node.arguments.forEach((n: any) => c(n))
     c(node.callee)
-    positions.push(node.start)
   }
+  function addPure(pos: number) {
+    let last = patches.length ? patches[patches.length - 1] : null
+    if (!last || last.from != pos || last.insert != pure)
+      patches.push({from: pos, insert: pure})
+  }
+
   recursive(parse(code, {ecmaVersion: 2020, sourceType: "module"}), null, {
-    CallExpression: call,
-    NewExpression: call,
+    CallExpression(node: any, _s, c) {
+      walkCall(node, c)
+      let m
+      addPure(node.start)
+      // TS-style enum
+      if (node.callee.type == "FunctionExpression" && node.callee.params.length == 1 &&
+          (m = /\bvar (\w+);\s*$/.exec(code.slice(node.start - 100, node.start))) &&
+          m[1] == node.callee.params[0].name) {
+        patches.push({from: m.index + 4 + m[1].length + (node.start - 100), to: node.start, insert: " = "})
+        patches.push({from: node.callee.body.end - 1, insert: "return " + m[1]})
+      }
+    },
+    NewExpression(node, _s, c) {
+      walkCall(node, c)
+      addPure(node.start)
+    },
     Function() {},
     Class() {}
   })
-  positions.sort((a, b) => a - b)
+  patches.sort((a, b) => a.from - b.from)
   for (let pos = 0, i = 0, result = "";; i++) {
-    let next = i == positions.length ? code.length : positions[i]
-    if (pos == next) continue
-    result += code.slice(pos, next)
-    pos = next
-    if (i == positions.length) return result
-    result += "/*@__PURE__*/"
+    let next = i == patches.length ? null : patches[i]
+    let nextPos = next ? next.from : code.length
+    result += code.slice(pos, nextPos)
+    if (!next) return result
+    result += next.insert
+    pos = next.to ?? nextPos
   }
 }
 
