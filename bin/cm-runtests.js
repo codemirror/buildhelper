@@ -4,7 +4,7 @@ const {resolve} = require("path")
 const {gatherTests, runTests} = require("../src/runtests")
 
 function help(exit = 1) {
-  console.log("Usage: cm-runtests [--chrome] [--firefox] dir [... dirs]")
+  console.log("Usage: cm-runtests [--chrome] [--firefox] [... dirs]")
   process.exit(exit)
 }
 
@@ -17,7 +17,7 @@ for (let i = 2, arg; (arg = process.argv[i]) != null; i++) {
   else if (arg[0] == "-") help()
   else dirs.push(resolve(arg))
 }
-if (!dirs.length) help()
+if (!dirs.length) dirs.push(".")
 if (!browsers.length) browsers.push("chrome")
 
 let {tests, browserTests} = gatherTests(dirs)
