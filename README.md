@@ -21,3 +21,7 @@ packages in their `prepare` scripts.
 The `cm-runtests` binary helps run tests. Given a list of directories,
 it'll run `./test/test-*.js` as plain mocha tests, and
 `./test/webtest-*.js` using a Selenium headless browser.
+
+In web tests, you can import `tempView(doc, extensions?)` from
+`"@codemirror/buildhelper/lib/tempview"` to quickly create a temporary
+hidden editor.

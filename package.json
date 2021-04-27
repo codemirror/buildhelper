@@ -13,7 +13,7 @@
     "cm-runtests": "bin/cm-runtests.js"
   },
   "scripts": {
-    "prepare": "tsc"
+    "prepare": "tsc && tsc -p lib"
   },
   "license": "MIT",
   "repository": {
@@ -36,5 +36,9 @@
     "esmoduleserve": "^0.2.0",
     "selenium-webdriver": "^4.0.0-beta.3",
     "serve-static": "^1.14.1"
+  },
+  "peerDependencies": {
+    "@codemirror/state": "^0.18.0",
+    "@codemirror/view": "^0.18.0"
   }
 }
