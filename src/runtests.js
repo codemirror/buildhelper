@@ -108,10 +108,10 @@ exports.testHTML = function(testFiles, selenium) {
 
 <script src="mocha.js"></script>
 <script>
+let output = []
 mocha.setup({
   ui: "bdd"${selenium ? `,
   reporter: function(runner) {
-    let output = []
     function add(test, data) {
       data.name = test.title
       data.scope = []
@@ -130,6 +130,7 @@ mocha.setup({
   }` : ""}
 })
 onload = () => mocha.run()
+onerror = e => output.push({name: "#" + (output.length + 1), scope: ["Top errors"], fail: String(e)})
 </script>
 ${testFiles.map(f => `<script type=module src="/_m/${f.replace(/\.\.\//g, "__/")}"></script>
 `).join("")}`
