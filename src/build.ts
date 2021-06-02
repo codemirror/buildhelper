@@ -61,6 +61,10 @@ function configFor(pkgs: readonly Package[], extra: readonly string[] = []) {
   }
 }
 
+function normalize(path: string) {
+  return path.replace(/\\/g, "/")
+}
+
 class Output {
   files: {[name: string]: string} = Object.create(null)
   changed: string[] = []
@@ -70,14 +74,19 @@ class Output {
   constructor() { this.write = this.write.bind(this) }
 
   write(path: string, content: string) {
-    if (this.files[path] == content) return
-    this.files[path] = content
+    let norm = normalize(path)
+    if (this.files[norm] == content) return
+    this.files[norm] = content
     if (!this.changed.includes(path)) this.changed.push(path)
     if (this.watchTimeout) clearTimeout(this.watchTimeout)
     if (this.watchers.length) this.watchTimeout = setTimeout(() => {
       this.watchers.forEach(w => w(this.changed))
       this.changed = []
     }, 100)
+  }
+
+  get(path: string) {
+    return this.files[normalize(path)]
   }
 }
 
@@ -136,11 +145,11 @@ function outputPlugin(output: Output, ext: string, base: Plugin) {
     resolveId(source: string, base: string | undefined, options: any) {
       let full = base && source[0] == "." ? resolve(dirname(base), source) : source
       if (!/\.\w+$/.test(full)) full += ext
-      if (output.files[full]) return full
+      if (output.get(full)) return full
       return resolveId ? resolveId.call(this, source, base, options) : undefined
     },
     load(file: string) {
-      return output.files[file] || (load && load.call(this, file))
+      return output.get(file) || (load && load.call(this, file))
     }
   } as Plugin
 }
@@ -246,7 +255,7 @@ export async function build(main: string | readonly string[]) {
   for (let pkg of pkgs) {
     await bundle(pkg, compiled)
     for (let file of pkg.tests.map(f => f.replace(/\.ts$/, ".js")))
-      fs.writeFileSync(file, compiled.files[file])
+      fs.writeFileSync(file, compiled.get(file))
   }
   return true
 }
@@ -272,7 +281,7 @@ export function watch(mains: readonly string[], extra: readonly string[] = []) {
         else if (!changedPkgs.includes(pkg)) changedPkgs.push(pkg)
       }
     }
-    for (let file of changedFiles) if (/\.js$/.test(file)) fs.writeFileSync(file, out.files[file])
+    for (let file of changedFiles) if (/\.js$/.test(file)) fs.writeFileSync(file, out.get(file))
     console.log("Bundling " + pkgs.map(p => basename(p.root)).join(", "))
     for (let pkg of changedPkgs) {
       try { await bundle(pkg, out) }
