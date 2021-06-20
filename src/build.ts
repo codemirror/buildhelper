@@ -57,7 +57,7 @@ function configFor(pkgs: readonly Package[], extra: readonly string[] = []) {
   return {
     compilerOptions: {paths, ...tsOptions},
     include: pkgs.reduce((ds, p) => ds.concat(p.dirs.map(d => join(d, "*.ts"))), [] as string[])
-      .concat(extra)
+      .concat(extra).map(normalize)
   }
 }
 
@@ -261,6 +261,7 @@ export async function build(main: string | readonly string[]) {
 }
 
 export function watch(mains: readonly string[], extra: readonly string[] = []) {
+  let extraNorm = extra.map(normalize);
   let pkgs = mains.map(Package.get)
   let out = watchTS(allDirs(pkgs), configFor(pkgs, extra))
   out.watchers.push(writeFor)
@@ -270,11 +271,11 @@ export function watch(mains: readonly string[], extra: readonly string[] = []) {
     let changedPkgs: Package[] = [], changedFiles: string[] = []
     for (let file of files) {
       let ts = file.replace(/\.d\.ts$|\.js$/, ".ts")
-      if (extra.includes(ts)) {
+      if (extraNorm.includes(ts)) {
         changedFiles.push(file)
       } else {
         let root = dirname(dirname(file))
-        let pkg = pkgs.find(p => p.root == root)
+        let pkg = pkgs.find(p => normalize(p.root) == root)
         if (!pkg)
           throw new Error("No package found for " + file)
         if (pkg.tests.includes(ts)) changedFiles.push(file)
