@@ -216,7 +216,7 @@ async function bundle(pkg: Package, compiled: Output) {
     external,
     plugins: [
       // @ts-ignore
-      outputPlugin(compiled, ".js", pkg.lezer ? (await import("lezer-generator/rollup")).lezer() : {name: "dummy"})
+      outputPlugin(compiled, ".js", pkg.lezer ? (await import("@lezer/generator/rollup")).lezer() : {name: "dummy"})
     ]
   })
   let dist = join(pkg.root, "dist")
