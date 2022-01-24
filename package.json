@@ -1,6 +1,6 @@
 {
   "name": "@codemirror/buildhelper",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "Helper package to build CodeMirror packages",
   "author": {
     "name": "Marijn Haverbeke",
