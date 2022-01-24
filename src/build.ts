@@ -94,7 +94,7 @@ function readAndMangleComments(dirs: readonly string[]) {
   return (name: string) => {
     let file = ts.sys.readFile(name)
     if (file && dirs.includes(dirname(name)))
-      file = file.replace(/(?:([ \t]*)\/\/\/.*\n)+/g, (comment, space) => {
+      file = file.replace(/(?<=^|\n)(?:([ \t]*)\/\/\/.*\n)+/g, (comment, space) => {
         comment = comment.replace(/\]\(#/g, "](https://codemirror.net/6/docs/ref/#")
         return `${space}/**\n${space}${comment.slice(space.length).replace(/\/\/\/ ?/g, "")}${space}*/\n`
       })
