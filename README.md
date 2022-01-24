@@ -18,6 +18,16 @@ packages in their `prepare` scripts.
 
 ---
 
+**NOTE**: This tool will add a `/*@__PURE__*/` annotation in front of
+_every_ top-level function call, to allow tree-shaking of things like
+`Facet.define(...)`. This is likely to break some styles of code
+(which, say, uses a side-effecting helper function to build up some
+top-level data structure), but I wasn't able to find another approach
+for working with the crude current state of JS dead-code detection
+tools.
+
+---
+
 The `cm-runtests` binary helps run tests. Given a list of directories,
 it'll run `./test/test-*.js` as plain mocha tests, and
 `./test/webtest-*.js` using a Selenium headless browser.
