@@ -1,7 +1,7 @@
 import * as ts from "typescript"
 import {join, dirname, basename, resolve} from "path"
 import * as fs from "fs"
-import {rollup, RollupBuild, Plugin} from "rollup"
+import {rollup, RollupBuild, Plugin, SourceMap} from "rollup"
 import dts from "rollup-plugin-dts"
 import {parse, Node} from "acorn"
 import {recursive} from "acorn-walk"
@@ -51,11 +51,11 @@ const tsOptions = {
   moduleResolution: "node"
 }
 
-function configFor(pkgs: readonly Package[], extra: readonly string[] = []) {
+function configFor(pkgs: readonly Package[], extra: readonly string[] = [], generateSourceMap = false) {
   let paths: ts.MapLike<string[]> = {}
   for (let pkg of pkgs) paths[pkg.json.name] = [pkg.main]
   return {
-    compilerOptions: {paths, ...tsOptions},
+    compilerOptions: {paths, ...tsOptions, sourceMap: generateSourceMap, inlineSources: generateSourceMap},
     include: pkgs.reduce((ds, p) => ds.concat(p.dirs.map(d => join(d, "*.ts"))), [] as string[])
       .concat(extra).map(normalize)
   }
@@ -149,7 +149,8 @@ function outputPlugin(output: Output, ext: string, base: Plugin) {
       return resolveId ? resolveId.call(this, source, base, options) : undefined
     },
     load(file: string) {
-      return output.get(file) || (load && load.call(this, file))
+      let code = output.get(file);
+      return code ? {code, map: output.get(file + '.map')} : (load && load.call(this, file));
     }
   } as Plugin
 }
@@ -205,12 +206,17 @@ async function emit(bundle: RollupBuild, conf: any, makePure = false) {
   await fs.promises.mkdir(dir, {recursive: true}).catch(() => null)
   for (let file of result.output) {
     let content = (file as any).code || (file as any).source
-    if (makePure) content = addPureComments(content)
+    if (makePure) content = addPureComments(content);
+    let sourceMap:SourceMap = (file as any).map;
+    if (sourceMap) {
+      content = content + `\n//# sourceMappingURL=${file.fileName}.map`;
+      await fs.promises.writeFile(join(dir, file.fileName + ".map"), sourceMap.toString());
+    }
     await fs.promises.writeFile(join(dir, file.fileName), content)
   }
 }
 
-async function bundle(pkg: Package, compiled: Output) {
+async function bundle(pkg: Package, compiled: Output, generateSourceMap = false) {
   let bundle = await rollup({
     input: pkg.main.replace(/\.ts$/, ".js"),
     external,
@@ -223,11 +229,14 @@ async function bundle(pkg: Package, compiled: Output) {
   await emit(bundle, {
     format: "esm",
     file: join(dist, "index.js"),
-    externalLiveBindings: false
-  }, true)
+    externalLiveBindings: false,
+    sourcemap: generateSourceMap
+  }, !generateSourceMap); // makePure set to false when generating source map since this manipulates output after source map is generated
+
   await emit(bundle, {
     format: "cjs",
-    file: join(dist, "index.cjs")
+    file: join(dist, "index.cjs"),
+    sourcemap: generateSourceMap
   })
 
   let tscBundle = await rollup({
@@ -248,29 +257,29 @@ function allDirs(pkgs: readonly Package[]) {
   return pkgs.reduce((a, p) => a.concat(p.dirs), [] as string[])
 }
 
-export async function build(main: string | readonly string[]) {
+export async function build(main: string | readonly string[], generateSourceMap = false) {
   let pkgs = typeof main == "string" ? [Package.get(main)] : main.map(Package.get)
-  let compiled = runTS(allDirs(pkgs), configFor(pkgs))
+  let compiled = runTS(allDirs(pkgs), configFor(pkgs, undefined, generateSourceMap));
   if (!compiled) return false
   for (let pkg of pkgs) {
-    await bundle(pkg, compiled)
+    await bundle(pkg, compiled, generateSourceMap);
     for (let file of pkg.tests.map(f => f.replace(/\.ts$/, ".js")))
       fs.writeFileSync(file, compiled.get(file))
   }
   return true
 }
 
-export function watch(mains: readonly string[], extra: readonly string[] = []) {
+export function watch(mains: readonly string[], extra: readonly string[] = [],generateSourceMap= false) {
   let extraNorm = extra.map(normalize);
   let pkgs = mains.map(Package.get)
-  let out = watchTS(allDirs(pkgs), configFor(pkgs, extra))
+  let out = watchTS(allDirs(pkgs), configFor(pkgs, extra, generateSourceMap));
   out.watchers.push(writeFor)
   writeFor(Object.keys(out.files))
 
   async function writeFor(files: readonly string[]) {
     let changedPkgs: Package[] = [], changedFiles: string[] = []
     for (let file of files) {
-      let ts = file.replace(/\.d\.ts$|\.js$/, ".ts")
+      let ts = file.replace(/\.d\.ts$|\.js$|\.js.map$/, ".ts")
       if (extraNorm.includes(ts)) {
         changedFiles.push(file)
       } else {
@@ -282,10 +291,10 @@ export function watch(mains: readonly string[], extra: readonly string[] = []) {
         else if (!changedPkgs.includes(pkg)) changedPkgs.push(pkg)
       }
     }
-    for (let file of changedFiles) if (/\.js$/.test(file)) fs.writeFileSync(file, out.get(file))
+    for (let file of changedFiles) if (/\.(js|map)$/.test(file)) fs.writeFileSync(file, out.get(file))
     console.log("Bundling " + pkgs.map(p => basename(p.root)).join(", "))
     for (let pkg of changedPkgs) {
-      try { await bundle(pkg, out) }
+      try { await bundle(pkg, out, generateSourceMap) }
       catch(e) { console.error(`Failed to bundle ${basename(pkg.root)}:\n${e}`) }
     }
     console.log("Bundling done.")
