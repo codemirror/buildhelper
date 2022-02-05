@@ -12,6 +12,11 @@ function tsFiles(dir: string) {
   return fs.readdirSync(dir).filter(f => /(?<!\.d)\.ts$/.test(f)).map(f => join(dir, f))
 }
 
+interface BuildOptions {
+  /// Generate sourcemap when generating bundle. defaults to false
+  sourceMap?: boolean;
+}
+
 class Package {
   readonly root: string
   readonly dirs: readonly string[]
@@ -207,7 +212,7 @@ async function emit(bundle: RollupBuild, conf: any, makePure = false) {
   for (let file of result.output) {
     let content = (file as any).code || (file as any).source
     if (makePure) content = addPureComments(content);
-    let sourceMap:SourceMap = (file as any).map;
+    let sourceMap: SourceMap = (file as any).map;
     if (sourceMap) {
       content = content + `\n//# sourceMappingURL=${file.fileName}.map`;
       await fs.promises.writeFile(join(dir, file.fileName + ".map"), sourceMap.toString());
@@ -216,7 +221,7 @@ async function emit(bundle: RollupBuild, conf: any, makePure = false) {
   }
 }
 
-async function bundle(pkg: Package, compiled: Output, generateSourceMap = false) {
+async function bundle(pkg: Package, compiled: Output, options: BuildOptions) {
   let bundle = await rollup({
     input: pkg.main.replace(/\.ts$/, ".js"),
     external,
@@ -230,13 +235,13 @@ async function bundle(pkg: Package, compiled: Output, generateSourceMap = false)
     format: "esm",
     file: join(dist, "index.js"),
     externalLiveBindings: false,
-    sourcemap: generateSourceMap
-  }, !generateSourceMap); // makePure set to false when generating source map since this manipulates output after source map is generated
+    sourcemap: options.sourceMap
+  }, !options.sourceMap); // makePure set to false when generating source map since this manipulates output after source map is generated
 
   await emit(bundle, {
     format: "cjs",
     file: join(dist, "index.cjs"),
-    sourcemap: generateSourceMap
+    sourcemap: options.sourceMap
   })
 
   let tscBundle = await rollup({
@@ -257,22 +262,22 @@ function allDirs(pkgs: readonly Package[]) {
   return pkgs.reduce((a, p) => a.concat(p.dirs), [] as string[])
 }
 
-export async function build(main: string | readonly string[], generateSourceMap = false) {
+export async function build(main: string | readonly string[], options: BuildOptions = {}) {
   let pkgs = typeof main == "string" ? [Package.get(main)] : main.map(Package.get)
-  let compiled = runTS(allDirs(pkgs), configFor(pkgs, undefined, generateSourceMap));
+  let compiled = runTS(allDirs(pkgs), configFor(pkgs, undefined, options.sourceMap));
   if (!compiled) return false
   for (let pkg of pkgs) {
-    await bundle(pkg, compiled, generateSourceMap);
+    await bundle(pkg, compiled, options);
     for (let file of pkg.tests.map(f => f.replace(/\.ts$/, ".js")))
       fs.writeFileSync(file, compiled.get(file))
   }
   return true
 }
 
-export function watch(mains: readonly string[], extra: readonly string[] = [],generateSourceMap= false) {
+export function watch(mains: readonly string[], extra: readonly string[] = [], options: BuildOptions = {}) {
   let extraNorm = extra.map(normalize);
   let pkgs = mains.map(Package.get)
-  let out = watchTS(allDirs(pkgs), configFor(pkgs, extra, generateSourceMap));
+  let out = watchTS(allDirs(pkgs), configFor(pkgs, extra, options.sourceMap));
   out.watchers.push(writeFor)
   writeFor(Object.keys(out.files))
 
@@ -294,7 +299,7 @@ export function watch(mains: readonly string[], extra: readonly string[] = [],ge
     for (let file of changedFiles) if (/\.(js|map)$/.test(file)) fs.writeFileSync(file, out.get(file))
     console.log("Bundling " + pkgs.map(p => basename(p.root)).join(", "))
     for (let pkg of changedPkgs) {
-      try { await bundle(pkg, out, generateSourceMap) }
+      try { await bundle(pkg, out, options) }
       catch(e) { console.error(`Failed to bundle ${basename(pkg.root)}:\n${e}`) }
     }
     console.log("Bundling done.")
