@@ -14,7 +14,7 @@ function tsFiles(dir: string) {
 
 interface BuildOptions {
   /// Generate sourcemap when generating bundle. defaults to false
-  sourceMap?: boolean;
+  sourceMap?: boolean
 }
 
 class Package {
@@ -154,8 +154,8 @@ function outputPlugin(output: Output, ext: string, base: Plugin) {
       return resolveId ? resolveId.call(this, source, base, options) : undefined
     },
     load(file: string) {
-      let code = output.get(file);
-      return code ? {code, map: output.get(file + '.map')} : (load && load.call(this, file));
+      let code = output.get(file)
+      return code ? {code, map: output.get(file + '.map')} : (load && load.call(this, file))
     }
   } as Plugin
 }
@@ -211,11 +211,11 @@ async function emit(bundle: RollupBuild, conf: any, makePure = false) {
   await fs.promises.mkdir(dir, {recursive: true}).catch(() => null)
   for (let file of result.output) {
     let content = (file as any).code || (file as any).source
-    if (makePure) content = addPureComments(content);
-    let sourceMap: SourceMap = (file as any).map;
+    if (makePure) content = addPureComments(content)
+    let sourceMap: SourceMap = (file as any).map
     if (sourceMap) {
-      content = content + `\n//# sourceMappingURL=${file.fileName}.map`;
-      await fs.promises.writeFile(join(dir, file.fileName + ".map"), sourceMap.toString());
+      content = content + `\n//# sourceMappingURL=${file.fileName}.map`
+      await fs.promises.writeFile(join(dir, file.fileName + ".map"), sourceMap.toString())
     }
     await fs.promises.writeFile(join(dir, file.fileName), content)
   }
@@ -236,7 +236,7 @@ async function bundle(pkg: Package, compiled: Output, options: BuildOptions) {
     file: join(dist, "index.js"),
     externalLiveBindings: false,
     sourcemap: options.sourceMap
-  }, !options.sourceMap); // makePure set to false when generating source map since this manipulates output after source map is generated
+  }, !options.sourceMap) // makePure set to false when generating source map since this manipulates output after source map is generated
 
   await emit(bundle, {
     format: "cjs",
@@ -264,10 +264,10 @@ function allDirs(pkgs: readonly Package[]) {
 
 export async function build(main: string | readonly string[], options: BuildOptions = {}) {
   let pkgs = typeof main == "string" ? [Package.get(main)] : main.map(Package.get)
-  let compiled = runTS(allDirs(pkgs), configFor(pkgs, undefined, options.sourceMap));
+  let compiled = runTS(allDirs(pkgs), configFor(pkgs, undefined, options.sourceMap))
   if (!compiled) return false
   for (let pkg of pkgs) {
-    await bundle(pkg, compiled, options);
+    await bundle(pkg, compiled, options)
     for (let file of pkg.tests.map(f => f.replace(/\.ts$/, ".js")))
       fs.writeFileSync(file, compiled.get(file))
   }
@@ -275,9 +275,9 @@ export async function build(main: string | readonly string[], options: BuildOpti
 }
 
 export function watch(mains: readonly string[], extra: readonly string[] = [], options: BuildOptions = {}) {
-  let extraNorm = extra.map(normalize);
+  let extraNorm = extra.map(normalize)
   let pkgs = mains.map(Package.get)
-  let out = watchTS(allDirs(pkgs), configFor(pkgs, extra, options.sourceMap));
+  let out = watchTS(allDirs(pkgs), configFor(pkgs, extra, options.sourceMap))
   out.watchers.push(writeFor)
   writeFor(Object.keys(out.files))
 
