@@ -77,7 +77,7 @@ exports.createTestServer = function({files, root, port = undefined, selenium = f
     if (pathname == "/") {
       resp.writeHead(200, {"content-type": "text/html; charset=utf-8"})
       resp.end(exports.testHTML(files.map(f => path.relative(root, f)), selenium))
-    } else if (m = /^\/mocha(\.\w+)$/.exec(pathname)) {
+    } else if (m = /^.*\/mocha(\.\w+)$/.exec(pathname)) {
       let base = require.resolve("mocha/mocha")
       let content = fs.readFileSync(base.replace(/\.\w+$/, m[1]), "utf8")
       resp.writeHead(200, {"content-type": (m == ".js" ? "application/javascript" : "text/css") + "; charset=utf-8"})

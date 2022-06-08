@@ -15,6 +15,8 @@ function tsFiles(dir: string) {
 interface BuildOptions {
   /// Generate sourcemap when generating bundle. defaults to false
   sourceMap?: boolean
+  /// Compiler options to pass to TypeScript
+  tsOptions?: any
 }
 
 class Package {
@@ -43,7 +45,7 @@ class Package {
   }
 }
 
-const tsOptions = {
+const tsDefaultOptions = {
   lib: ["es6", "scripthost", "dom"],
   types: ["mocha"],
   stripInternal: true,
@@ -56,11 +58,12 @@ const tsOptions = {
   moduleResolution: "node"
 }
 
-function configFor(pkgs: readonly Package[], extra: readonly string[] = [], generateSourceMap = false) {
+function configFor(pkgs: readonly Package[], extra: readonly string[] = [], options: BuildOptions) {
   let paths: ts.MapLike<string[]> = {}
   for (let pkg of pkgs) paths[pkg.json.name] = [pkg.main]
+  let {sourceMap, tsOptions} = options
   return {
-    compilerOptions: {paths, ...tsOptions, sourceMap: generateSourceMap, inlineSources: generateSourceMap},
+    compilerOptions: {paths, ...tsDefaultOptions, ...tsOptions, sourceMap: !!sourceMap, inlineSources: sourceMap},
     include: pkgs.reduce((ds, p) => ds.concat(p.dirs.map(d => join(d, "*.ts"))), [] as string[])
       .concat(extra).map(normalize)
   }
@@ -264,7 +267,7 @@ function allDirs(pkgs: readonly Package[]) {
 
 export async function build(main: string | readonly string[], options: BuildOptions = {}) {
   let pkgs = typeof main == "string" ? [Package.get(main)] : main.map(Package.get)
-  let compiled = runTS(allDirs(pkgs), configFor(pkgs, undefined, options.sourceMap))
+  let compiled = runTS(allDirs(pkgs), configFor(pkgs, undefined, options))
   if (!compiled) return false
   for (let pkg of pkgs) {
     await bundle(pkg, compiled, options)
@@ -277,7 +280,7 @@ export async function build(main: string | readonly string[], options: BuildOpti
 export function watch(mains: readonly string[], extra: readonly string[] = [], options: BuildOptions = {}) {
   let extraNorm = extra.map(normalize)
   let pkgs = mains.map(Package.get)
-  let out = watchTS(allDirs(pkgs), configFor(pkgs, extra, options.sourceMap))
+  let out = watchTS(allDirs(pkgs), configFor(pkgs, extra, options))
   out.watchers.push(writeFor)
   writeFor(Object.keys(out.files))
 
