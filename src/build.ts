@@ -16,8 +16,12 @@ interface BuildOptions {
   /// Generate sourcemap when generating bundle. defaults to false
   sourceMap?: boolean
   /// Compiler options to pass to TypeScript
-  tsOptions?: any
+  tsOptions?: any,
+  /// Option to enable or disable adding of /*@__PURE__*/ annotations
+  addPureAnnotations?: boolean
 }
+
+export const defaultBuildOptions = { addPureAnnotations: true }
 
 class Package {
   readonly root: string
@@ -239,7 +243,7 @@ async function bundle(pkg: Package, compiled: Output, options: BuildOptions) {
     file: join(dist, "index.js"),
     externalLiveBindings: false,
     sourcemap: options.sourceMap
-  }, !options.sourceMap) // makePure set to false when generating source map since this manipulates output after source map is generated
+  }, options.addPureAnnotations && !options.sourceMap) // makePure set to false when generating source map since this manipulates output after source map is generated
 
   await emit(bundle, {
     format: "cjs",
@@ -265,7 +269,7 @@ function allDirs(pkgs: readonly Package[]) {
   return pkgs.reduce((a, p) => a.concat(p.dirs), [] as string[])
 }
 
-export async function build(main: string | readonly string[], options: BuildOptions = {}) {
+export async function build(main: string | readonly string[], options: BuildOptions = defaultBuildOptions) {
   let pkgs = typeof main == "string" ? [Package.get(main)] : main.map(Package.get)
   let compiled = runTS(allDirs(pkgs), configFor(pkgs, undefined, options))
   if (!compiled) return false
@@ -277,7 +281,7 @@ export async function build(main: string | readonly string[], options: BuildOpti
   return true
 }
 
-export function watch(mains: readonly string[], extra: readonly string[] = [], options: BuildOptions = {}) {
+export function watch(mains: readonly string[], extra: readonly string[] = [], options: BuildOptions = defaultBuildOptions) {
   let extraNorm = extra.map(normalize)
   let pkgs = mains.map(Package.get)
   let out = watchTS(allDirs(pkgs), configFor(pkgs, extra, options))
