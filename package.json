@@ -4,7 +4,7 @@
   "description": "Helper package to build CodeMirror packages",
   "author": {
     "name": "Marijn Haverbeke",
-    "email": "marijnh@gmail.com",
+    "email": "marijn@haverbeke.berlin",
     "url": "http://marijnhaverbeke.nl"
   },
   "main": "./src/build.js",
