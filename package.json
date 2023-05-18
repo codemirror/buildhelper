@@ -12,9 +12,6 @@
     "cm-buildhelper": "bin/cm-buildhelper.js",
     "cm-runtests": "bin/cm-runtests.js"
   },
-  "scripts": {
-    "prepare": "tsc && tsc -p lib"
-  },
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -27,16 +24,12 @@
   },
   "dependencies": {
     "@types/mocha": "^9.1.1",
-    "acorn": "^8.1.0",
-    "acorn-walk": "^8.0.2",
     "@lezer/generator": "^1.0.0",
-    "rollup": "^2.35.1",
-    "rollup-plugin-dts": "^3.0.0",
-    "typescript": "^4.2.3",
     "mocha": "^10.0.0",
     "ist": "^1.1.7",
     "esmoduleserve": "^0.2.0",
     "selenium-webdriver": "^4.0.0-beta.3",
-    "serve-static": "^1.14.1"
+    "serve-static": "^1.14.1",
+    "@marijn/buildtool": "^0.1.4"
   }
 }
