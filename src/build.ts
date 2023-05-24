@@ -154,11 +154,11 @@ function outputPlugin(output: Output, ext: string, base: Plugin) {
       let full = base && source[0] == "." ? resolve(dirname(base), source) : source
       if (!/\.\w+$/.test(full)) full += ext
       if (output.get(full)) return full
-      return resolveId ? resolveId.call(this, source, base, options) : undefined
+      return resolveId ? (resolveId as Function).call(this, source, base, options) : undefined
     },
     load(file: string) {
       let code = output.get(file)
-      return code ? {code, map: output.get(file + '.map')} : (load && load.call(this, file))
+      return code ? {code, map: output.get(file + '.map')} : (load && (load as Function).call(this, file))
     }
   } as Plugin
 }
