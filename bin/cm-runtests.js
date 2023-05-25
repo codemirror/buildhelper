@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const {resolve} = require("path")
-const {gatherTests, runTests, createTestServer} = require("../src/runtests")
+const {gatherTests, runTests, createTestServer} = require("@marijn/testtool")
 
 function help(exit = 1) {
   console.log("Usage: cm-runtests [--server] [--chrome] [--firefox] [--grep pattern] [... dirs]")
