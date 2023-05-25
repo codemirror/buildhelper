@@ -34,7 +34,3 @@ it'll run `./test/test-*.js` as plain mocha tests, and
 
 You can also pass it a `--server` argument to start a test server that
 you can interact with in your browser.
-
-In web tests, you can import `tempView(doc, extensions?)` from
-`"@codemirror/buildhelper/lib/tempview"` to quickly create a temporary
-hidden editor.
