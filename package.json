@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@lezer/generator": "^1.0.0",
-    "@marijn/buildtool": "^0.1.4",
+    "@marijn/buildtool": "^1.0.0",
     "@marijn/testtool": "^0.1.1"
   }
 }
