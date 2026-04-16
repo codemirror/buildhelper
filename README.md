@@ -1,3 +1,5 @@
+**The repository has moved to https://code.haverbeke.berlin/codemirror/buildhelper**
+
 Helper scripts to build and test CodeMirror packages.
 
 The exports (`build` and `watch`) from this package build packages
